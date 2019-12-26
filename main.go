@@ -168,7 +168,7 @@ func main() {
 		os.Args[1],
 		[]string{
 			"-o",
-			"ro,nosuid,nodev,noexec,noatime,norelatime,allow_other,auto_unmount,direct_io",
+			"ro,nosuid,nodev,noexec,noatime,allow_other,auto_unmount,direct_io",
 		},
 	)
 }
