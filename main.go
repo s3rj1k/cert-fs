@@ -11,17 +11,17 @@ import (
 )
 
 /*
-	redis-cli -x SET s3rj1k.xyz.crt <certs/s3rj1k.xyz.crt
-	redis-cli -x SET s3rj1k.xyz.key <certs/s3rj1k.xyz.key
+	redis-cli -n 15 -x SET s3rj1k.xyz.crt <certs/s3rj1k.xyz.crt
+	redis-cli -n 15 -x SET s3rj1k.xyz.key <certs/s3rj1k.xyz.key
 
-	redis-cli -x SET .s3rj1k.xyz.crt <certs/.s3rj1k.xyz.crt
-	redis-cli -x SET .s3rj1k.xyz.key <certs/.s3rj1k.xyz.key
+	redis-cli -n 15 -x SET .s3rj1k.xyz.crt <certs/.s3rj1k.xyz.crt
+	redis-cli -n 15 -x SET .s3rj1k.xyz.key <certs/.s3rj1k.xyz.key
 
-	redis-cli -x SET test1.domain.com.crt <certs/test1.domain.com.crt
-	redis-cli -x SET test1.domain.com.key <certs/test1.domain.com.key
+	redis-cli -n 15 -x SET test1.domain.com.crt <certs/test1.domain.com.crt
+	redis-cli -n 15 -x SET test1.domain.com.key <certs/test1.domain.com.key
 
-	redis-cli -x SET .wilddomain.com.crt <certs/.wilddomain.com.crt
-	redis-cli -x SET .wilddomain.com.key <certs/.wilddomain.com.key
+	redis-cli -n 15 -x SET .wilddomain.com.crt <certs/.wilddomain.com.crt
+	redis-cli -n 15 -x SET .wilddomain.com.key <certs/.wilddomain.com.key
 
 	openssl x509 -text -noout -in {DOMAIN}
 */
@@ -48,6 +48,7 @@ func (fs *CertFS) Init() {
 			return redis.Dial(
 				"tcp",
 				dbAddress,
+				redis.DialDatabase(15),
 			)
 		},
 	}
