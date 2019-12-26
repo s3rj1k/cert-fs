@@ -1,0 +1,4 @@
+github.com/billziss-gh/cgofuse v1.2.0 h1:FMdQSygSBpD4yEPENJcmvfCdmNWMVkPLlD7wWdl/7IA=
+github.com/billziss-gh/cgofuse v1.2.0/go.mod h1:LJjoaUojlVjgo5GQoEJTcJNqZJeRU0nCR84CyxKt2YM=
+github.com/gomodule/redigo v2.0.0+incompatible h1:K/R+8tc58AaqLkqG2Ol3Qk+DR/TlNuhuh457pBFPtt0=
+github.com/gomodule/redigo v2.0.0+incompatible/go.mod h1:B4C85qUVwatsJoIUNIfCRsp7qO0iAmpGFZ4EELWSbC4=
