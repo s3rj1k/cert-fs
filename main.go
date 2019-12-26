@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/billziss-gh/cgofuse/fuse"
@@ -10,10 +11,19 @@ import (
 )
 
 /*
-	redis-cli -x SET s3rj1k.xyz.crt <s3rj1k.xyz.crt
-	redis-cli -x SET .s3rj1k.xyz.crt <.s3rj1k.xyz.crt
-	redis-cli -x SET s3rj1k.xyz.key <s3rj1k.xyz.key
-	redis-cli -x SET .s3rj1k.xyz.key <.s3rj1k.xyz.key
+	redis-cli -x SET s3rj1k.xyz.crt <certs/s3rj1k.xyz.crt
+	redis-cli -x SET s3rj1k.xyz.key <certs/s3rj1k.xyz.key
+
+	redis-cli -x SET .s3rj1k.xyz.crt <certs/.s3rj1k.xyz.crt
+	redis-cli -x SET .s3rj1k.xyz.key <certs/.s3rj1k.xyz.key
+
+	redis-cli -x SET test1.domain.com.crt <certs/test1.domain.com.crt
+	redis-cli -x SET test1.domain.com.key <certs/test1.domain.com.key
+
+	redis-cli -x SET .wilddomain.com.crt <certs/.wilddomain.com.crt
+	redis-cli -x SET .wilddomain.com.key <certs/.wilddomain.com.key
+
+	openssl x509 -text -noout -in {DOMAIN}
 */
 
 const (
@@ -21,12 +31,15 @@ const (
 	pathSeparator = "/"
 )
 
+// CertFS describes fuse based certificate filesystem backed by Redis.
 type CertFS struct {
 	fuse.FileSystemBase
 
-	db *redis.Pool
+	db             *redis.Pool
+	reDomainPrefix *regexp.Regexp
 }
 
+// Init initializes fuse based filesystem.
 func (fs *CertFS) Init() {
 	fs.db = &redis.Pool{
 		MaxIdle:   2,
@@ -38,26 +51,38 @@ func (fs *CertFS) Init() {
 			)
 		},
 	}
+
+	fs.reDomainPrefix = regexp.MustCompile(`^.*?\.`)
 }
 
-func PathToKey(path string) string {
-	return strings.TrimPrefix(filepath.Clean(path), pathSeparator)
+// PathToKeys returns keys for K/V DB computed from provided paths.
+func (fs *CertFS) PathToKeys(path string) []string {
+	exact := strings.ToLower(
+		strings.TrimPrefix(
+			filepath.Clean(path), pathSeparator,
+		),
+	)
+	wildcard := fs.reDomainPrefix.ReplaceAllString(exact, ".")
+
+	return []string{exact, wildcard}
 }
 
-func (fs *CertFS) Open(path string, flags int) (errc int, fh uint64) {
+// Open implements 'Open' syscall.
+func (fs *CertFS) Open(path string, _ /*flags*/ int) (errc int, fh uint64) {
 	c := fs.db.Get()
 	defer c.Close()
 
-	if ok, _ := redis.Bool(
-		c.Do("EXISTS", PathToKey(path)),
-	); ok {
-		return 0, 0
+	for _, key := range fs.PathToKeys(path) {
+		if n, _ := redis.Int(c.Do("EXISTS", key)); n > 0 {
+			return 0, 0
+		}
 	}
 
 	return -fuse.ENOENT, ^uint64(0)
 }
 
-func (fs *CertFS) Getattr(path string, stat *fuse.Stat_t, fh uint64) (errc int) {
+// Getattr implements 'Getattr' syscall.
+func (fs *CertFS) Getattr(path string, stat *fuse.Stat_t, _ /*fh*/ uint64) (errc int) {
 	if strings.HasSuffix(path, pathSeparator) {
 		stat.Mode = fuse.S_IFDIR | 0555
 
@@ -67,45 +92,51 @@ func (fs *CertFS) Getattr(path string, stat *fuse.Stat_t, fh uint64) (errc int) 
 	c := fs.db.Get()
 	defer c.Close()
 
-	if ok, _ := redis.Bool(
-		c.Do("EXISTS", PathToKey(path)),
-	); ok {
-		stat.Mode = fuse.S_IFREG | 0444
+	for _, key := range fs.PathToKeys(path) {
+		if n, _ := redis.Int(c.Do("EXISTS", key)); n > 0 {
+			stat.Mode = fuse.S_IFREG | 0444
 
-		return 0
+			return 0
+		}
 	}
 
 	return -fuse.ENOENT
 }
 
-func (fs *CertFS) Read(path string, buff []byte, ofset int64, fh uint64) (n int) {
+// Read implements 'Read' syscall.
+func (fs *CertFS) Read(path string, buff []byte, ofset int64, _ /*fh*/ uint64) int {
 	c := fs.db.Get()
 	defer c.Close()
 
-	data, err := redis.Bytes(
-		c.Do("GET", PathToKey(path)),
-	)
-	if err != nil {
-		return 0
+	for _, key := range fs.PathToKeys(path) {
+		data, err := redis.Bytes(
+			c.Do("GET", key),
+		)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+
+		endOfset := ofset + int64(len(buff))
+		dataLen := int64(len(data))
+
+		if endOfset > dataLen {
+			endOfset = dataLen
+		}
+
+		if endOfset < ofset {
+			return 0
+		}
+
+		n := copy(buff, data[ofset:endOfset])
+
+		return n
 	}
 
-	endOfset := ofset + int64(len(buff))
-	dataLen := int64(len(data))
-
-	if endOfset > dataLen {
-		endOfset = dataLen
-	}
-
-	if endOfset < ofset {
-		return 0
-	}
-
-	n = copy(buff, data[ofset:endOfset])
-
-	return
+	return 0
 }
 
-func (fs *CertFS) Readdir(_ string, fill func(name string, stat *fuse.Stat_t, ofst int64) bool, ofst int64, _ uint64) (errc int) {
+// Readdir implements 'Readdir' syscall.
+func (fs *CertFS) Readdir(_ /*path*/ string, fill func(name string, stat *fuse.Stat_t, ofset int64) bool, _ /*ofset*/ int64, _ /*fh*/ uint64) (errc int) {
 	fill(".", nil, 0)
 	fill("..", nil, 0)
 
@@ -136,7 +167,7 @@ func main() {
 		os.Args[1],
 		[]string{
 			"-o",
-			"ro,nosuid,nodev,noexec,noatime,allow_other,auto_unmount,direct_io",
+			"ro,nosuid,nodev,noexec,noatime,norelatime,allow_other,auto_unmount,direct_io",
 		},
 	)
 }
