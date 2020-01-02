@@ -23,6 +23,12 @@ import (
 	redis-cli -n 15 -x SET .wilddomain.com.crt <certs/.wilddomain.com.crt
 	redis-cli -n 15 -x SET .wilddomain.com.key <certs/.wilddomain.com.key
 
+	redis-cli -n 15 -x SET test.s3rj1k.xyz.crt <certs/test.s3rj1k.xyz.crt
+	redis-cli -n 15 -x SET test.s3rj1k.xyz.key <certs/test.s3rj1k.xyz.key
+
+	redis-cli -n 15 -x SET .test.s3rj1k.xyz.crt <certs/.test.s3rj1k.xyz.crt
+	redis-cli -n 15 -x SET .test.s3rj1k.xyz.key <certs/.test.s3rj1k.xyz.key
+
 	openssl x509 -text -noout -in {DOMAIN}
 */
 
